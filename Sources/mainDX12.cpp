@@ -1203,7 +1203,7 @@ int main()
                                         .RegisterSpace = 0,
                                         .Flags =
                                             D3D12_ROOT_DESCRIPTOR_FLAG_DATA_STATIC_WHILE_SET_AT_EXECUTE,
-                                    },                                                       .ShaderVisibility = D3D12_SHADER_VISIBILITY_MESH,
+                                    },                                                    .ShaderVisibility = D3D12_SHADER_VISIBILITY_MESH,
                              },
                             // Object Constant buffer
                             {
@@ -1214,7 +1214,17 @@ int main()
                                         .RegisterSpace = 0,
                                         .Flags =
                                             D3D12_ROOT_DESCRIPTOR_FLAG_DATA_STATIC_WHILE_SET_AT_EXECUTE,
-                                    },                                                                                            .ShaderVisibility = D3D12_SHADER_VISIBILITY_MESH,
+                                    },                                                                                         .ShaderVisibility = D3D12_SHADER_VISIBILITY_MESH,
+                             },
+                            {
+                             .ParameterType = D3D12_ROOT_PARAMETER_TYPE_CBV,
+                             .Descriptor =
+                                    {
+                                        .ShaderRegister = 2,
+                                        .RegisterSpace = 0,
+                                        .Flags =
+                                            D3D12_ROOT_DESCRIPTOR_FLAG_DATA_STATIC_WHILE_SET_AT_EXECUTE,
+                                    },.ShaderVisibility = D3D12_SHADER_VISIBILITY_MESH,
                              },
                             // Point Lights Structured buffer
                             {
@@ -1388,7 +1398,7 @@ int main()
 
                         const D3D12_RASTERIZER_DESC raster{
                             .FillMode = D3D12_FILL_MODE_SOLID,
-                            .CullMode = D3D12_CULL_MODE_BACK,
+                            .CullMode = D3D12_CULL_MODE_FRONT,
                             .FrontCounterClockwise = FALSE,
                             .DepthBias = D3D12_DEFAULT_DEPTH_BIAS,
                             .DepthBiasClamp = D3D12_DEFAULT_DEPTH_BIAS_CLAMP,
@@ -2563,6 +2573,8 @@ int main()
                             0, cameraBuffer->GetGPUVirtualAddress()); // Camera UBO
                         cmd->SetGraphicsRootConstantBufferView(
                             1, sphereObjectBuffer->GetGPUVirtualAddress()); // Object UBO
+                        cmd->SetGraphicsRootConstantBufferView(
+                            2, sphereVertexBuffers[0]->GetGPUVirtualAddress());
 
                         const UINT srvOffset = device->GetDescriptorHandleIncrementSize(
                             D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
@@ -2574,12 +2586,12 @@ int main()
                          * create BufferView in SRV Heap. This allows use to correctly call
                          * pointLights.GetDimensions() in HLSL.
                          */
-                        // cmd->SetGraphicsRootShaderResourceView(2,
+                        // cmd->SetGraphicsRootShaderResourceView(3,
                         // pointLightBuffer->GetGPUVirtualAddress()); // PointLights
-                        cmd->SetGraphicsRootDescriptorTable(2, gpuHandle); // PointLights
+                        cmd->SetGraphicsRootDescriptorTable(3, gpuHandle); // PointLights
                         gpuHandle.ptr += srvOffset;
 
-                        cmd->SetGraphicsRootDescriptorTable(3, gpuHandle); // PBR textures
+                        cmd->SetGraphicsRootDescriptorTable(4, gpuHandle); // PBR textures
                         gpuHandle.ptr += srvOffset;
 
                         /* 0008-U */

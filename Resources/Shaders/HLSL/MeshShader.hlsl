@@ -50,6 +50,20 @@ cbuffer ObjectBuffer : register(b1)
 	Object object;
 };
 
+struct VertexFactory
+{
+	float3 position;
+
+	float3 normal;
+
+	float3 tangent;
+
+	float2 uv;
+};
+cbuffer VertexBuffer : register(b2)
+{
+	VertexFactory vertices;
+}
 
 static float4 cubeVertices[] =
 {
@@ -107,9 +121,9 @@ void main(in uint groupThreadId : SV_GroupThreadID,
 		float4 pos = cubeVertices[groupThreadId];
 		
 		//---------- Position ----------
-		const float4 worldPosition4 = mul(object.transform, pos);
+		const float4 worldPosition4 = mul(pos, object.transform);
 		outVerts[groupThreadId].worldPosition = worldPosition4.xyz / worldPosition4.w;
-		outVerts[groupThreadId].svPosition = mul(camera.invViewProj, worldPosition4);
+		outVerts[groupThreadId].svPosition = mul(worldPosition4, camera.invViewProj);
 		outVerts[groupThreadId].viewPosition = float3(camera.view._14, camera.view._24, camera.view._34);
 
 
@@ -118,7 +132,7 @@ void main(in uint groupThreadId : SV_GroupThreadID,
 		const float3 tangent = normalize(mul((float3x3)object.transform, pos.xyz));
 		const float3 bitangent = cross(normal, tangent);
 
-		/// HLSL uses row-major constructor: transpose to get TBN matrix.
+		// HLSL uses row-major constructor: transpose to get TBN matrix.
 		outVerts[groupThreadId].TBN = transpose(float3x3(tangent, bitangent, normal));
 
 
