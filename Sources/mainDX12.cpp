@@ -302,6 +302,16 @@ struct ObjectUBO
 constexpr SA::Vec3f spherePosition(0.5f, 0.0f, 2.0f);
 MComPtr<ID3D12Resource> sphereObjectBuffer;
 
+struct Meshlet
+{
+    uint32_t vertexCount;
+    uint32_t vertexOffset;
+    uint32_t primitiveCount;
+    uint32_t primitiveOffset;
+};
+MComPtr<ID3D12Resource> meshletsBuffer;
+MComPtr<ID3D12Resource> primitiveIndicesBuffer;
+
 // = PointLights Buffer =
 struct PointLightUBO
 {
@@ -1148,14 +1158,22 @@ int main()
                          * specify all the shader bindings here.
                          */
 
-                        // const D3D12_DESCRIPTOR_RANGE1 vertexBufferPositionSRVRange{
-                        //     .RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_SRV,
-                        //     .NumDescriptors = 1,
-                        //     .BaseShaderRegister = 5,
-                        //     .RegisterSpace = 0,
-                        //     .Flags = D3D12_DESCRIPTOR_RANGE_FLAG_DATA_STATIC,
-                        //     .OffsetInDescriptorsFromTableStart =
-                        //         D3D12_DESCRIPTOR_RANGE_OFFSET_APPEND};
+                        const D3D12_DESCRIPTOR_RANGE1 meshletSRVRange{
+                            .RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_SRV,
+                            .NumDescriptors = 1,
+                            .BaseShaderRegister = 5,
+                            .RegisterSpace = 0,
+                            .Flags = D3D12_DESCRIPTOR_RANGE_FLAG_DATA_STATIC,
+                            .OffsetInDescriptorsFromTableStart =
+                                D3D12_DESCRIPTOR_RANGE_OFFSET_APPEND};
+                        const D3D12_DESCRIPTOR_RANGE1 primitiveIndicesSRVRange{
+                            .RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_SRV,
+                            .NumDescriptors = 1,
+                            .BaseShaderRegister = 8,
+                            .RegisterSpace = 0,
+                            .Flags = D3D12_DESCRIPTOR_RANGE_FLAG_DATA_STATIC,
+                            .OffsetInDescriptorsFromTableStart =
+                                D3D12_DESCRIPTOR_RANGE_OFFSET_APPEND};
 
                         const D3D12_DESCRIPTOR_RANGE1 pointLightSRVRange{
                             .RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_SRV,
@@ -1225,20 +1243,45 @@ int main()
                                             D3D12_ROOT_DESCRIPTOR_FLAG_DATA_STATIC_WHILE_SET_AT_EXECUTE,
                                     },                                                                                         .ShaderVisibility = D3D12_SHADER_VISIBILITY_MESH,
                              },
-                            // Vertex Buffer Structured buffer
-                            // {
-                            //  .ParameterType = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE,
-                            //  .DescriptorTable{.NumDescriptorRanges = 1,
-                            //                      .pDescriptorRanges =
-                            //                          &vertexBufferPositionSRVRange},
-                            //  .ShaderVisibility = D3D12_SHADER_VISIBILITY_MESH,
-                            //  },
+                            // Meshlets Structured buffer
+                            {
+                             .ParameterType = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE,
+                             .DescriptorTable{.NumDescriptorRanges = 1,
+                                                 .pDescriptorRanges = &meshletSRVRange},
+                             .ShaderVisibility = D3D12_SHADER_VISIBILITY_MESH,
+                             },
+                            {
+                             .ParameterType = D3D12_ROOT_PARAMETER_TYPE_SRV,
+                             .Descriptor =
+                                    {
+                                        .ShaderRegister = 6,
+                                        .RegisterSpace = 0,
+                                        .Flags =
+                                            D3D12_ROOT_DESCRIPTOR_FLAG_DATA_STATIC_WHILE_SET_AT_EXECUTE,
+                                    }, .ShaderVisibility = D3D12_SHADER_VISIBILITY_MESH,
+                             },
+                            {
+                             .ParameterType = D3D12_ROOT_PARAMETER_TYPE_SRV,
+                             .Descriptor =
+                                    {
+                                        .ShaderRegister = 7,
+                                        .RegisterSpace = 0,
+                                        .Flags =
+                                            D3D12_ROOT_DESCRIPTOR_FLAG_DATA_STATIC_WHILE_SET_AT_EXECUTE,
+                                    },                                                           .ShaderVisibility = D3D12_SHADER_VISIBILITY_MESH,
+                             },
+                            {
+                             .ParameterType = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE,
+                             .DescriptorTable{.NumDescriptorRanges = 1,
+                                                 .pDescriptorRanges = &primitiveIndicesSRVRange},
+                             .ShaderVisibility = D3D12_SHADER_VISIBILITY_MESH,
+                             },
                             // Point Lights Structured buffer
                             {
                              /**
-                             * Use DescriptorTable with SRV type instead of direct SRV binding
-                             * to create BufferView in SRV Heap. This allows use to correctly
-                             * call pointLights.GetDimensions() in HLSL.
+                             * Use DescriptorTable with SRV type instead of direct SRV
+                             * binding to create BufferView in SRV Heap. This allows use to
+                             * correctly call pointLights.GetDimensions() in HLSL.
                              */
                                 .ParameterType = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE,
                              .DescriptorTable{.NumDescriptorRanges = 1,
@@ -1488,7 +1531,7 @@ int main()
                      */
 
                     D3D12_DESCRIPTOR_HEAP_DESC desc{.Type = D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV,
-                                                    .NumDescriptors = 5,
+                                                    .NumDescriptors = 7,
                                                     .Flags =
                                                         D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE};
 
@@ -1695,7 +1738,10 @@ int main()
                         }
 
                         const aiMesh* inMesh = scene->mMeshes[0];
-
+                        auto vertexCount = inMesh->mNumVertices;
+                        uint32_t meshletSize = 128;
+                        uint32_t meshletCount = vertexCount / meshletSize;
+                        meshletCount = 1;
                         // Position
                         {
                             /**
@@ -1927,6 +1973,8 @@ int main()
                             }
                         }
 
+                        auto primitiveCount = inMesh->mNumFaces;
+                        // primitiveCount = 1;
                         // Index
                         {
                             const D3D12_HEAP_PROPERTIES heap{
@@ -1995,6 +2043,156 @@ int main()
                                 return EXIT_FAILURE;
                             }
                         }
+
+                        // Meshlets Buffer
+                        {
+                            const D3D12_HEAP_PROPERTIES heap{
+                                .Type = D3D12_HEAP_TYPE_DEFAULT,
+                            };
+
+                            const D3D12_RESOURCE_DESC desc{
+                                .Dimension = D3D12_RESOURCE_DIMENSION_BUFFER,
+                                .Alignment = 0,
+                                .Width = meshletCount * sizeof(Meshlet),
+                                .Height = 1,
+                                .DepthOrArraySize = 1,
+                                .MipLevels = 1,
+                                .Format = DXGI_FORMAT_UNKNOWN,
+                                .SampleDesc = {.Count = 1, .Quality = 0},
+                                .Layout = D3D12_TEXTURE_LAYOUT_ROW_MAJOR,
+                                .Flags = D3D12_RESOURCE_FLAG_NONE,
+                            };
+
+                            const HRESULT hrBufferCreated = device->CreateCommittedResource(
+                                &heap, D3D12_HEAP_FLAG_NONE, &desc, D3D12_RESOURCE_STATE_COMMON,
+                                nullptr, IID_PPV_ARGS(&meshletsBuffer));
+                            if (FAILED(hrBufferCreated))
+                            {
+                                SA_LOG(L"Create Meshlets Buffer failed!", Error, DX12,
+                                       (L"Error code: %1", hrBufferCreated));
+                                return EXIT_FAILURE;
+                            }
+                            else
+                            {
+                                const LPCWSTR name = L"MeshletsBuffer";
+                                meshletsBuffer->SetName(name);
+
+                                SA_LOG(L"Create Meshlets Buffer success", Info, DX12,
+                                       (L"\"%1\" [%2]", name, meshletsBuffer.Get()));
+                            }
+
+                            std::vector<Meshlet> meshlets;
+                            meshlets.push_back(Meshlet{.vertexCount = meshletSize,
+                                                       .vertexOffset = 0,
+                                                       .primitiveCount = primitiveCount,
+                                                       .primitiveOffset = 0});
+
+                            const bool bSubmitSuccess =
+                                SubmitBufferToGPU(meshletsBuffer, desc.Width, meshlets.data(),
+                                                  D3D12_RESOURCE_STATE_VERTEX_AND_CONSTANT_BUFFER);
+                            if (!bSubmitSuccess)
+                            {
+                                SA_LOG(L"Sphere Meshlet submit failed!", Error, DX12);
+                                return EXIT_FAILURE;
+                            }
+
+                            // Create View /* 0011-I-1 */
+                            {
+                                D3D12_SHADER_RESOURCE_VIEW_DESC viewDesc{
+                                    .ViewDimension = D3D12_SRV_DIMENSION_BUFFER,
+                                    .Shader4ComponentMapping =
+                                        D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING,
+                                    .Buffer{
+                                            .FirstElement = 0,
+                                            .NumElements = static_cast<UINT>(meshletCount),
+                                            .StructureByteStride = sizeof(Meshlet),
+                                            },
+                                };
+                                D3D12_CPU_DESCRIPTOR_HANDLE cpuHandle =
+                                    pbrSphereSRVHeap->GetCPUDescriptorHandleForHeapStart();
+                                const UINT srvOffset = device->GetDescriptorHandleIncrementSize(
+                                    D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
+                                cpuHandle.ptr += srvOffset;
+                                device->CreateShaderResourceView(meshletsBuffer.Get(), &viewDesc,
+                                                                 cpuHandle);
+                            }
+                        }
+                        // Meshlets Primitive Indices Buffer
+                        {
+                            const D3D12_HEAP_PROPERTIES heap{
+                                .Type = D3D12_HEAP_TYPE_DEFAULT,
+                            };
+
+                            const D3D12_RESOURCE_DESC desc{
+                                .Dimension = D3D12_RESOURCE_DIMENSION_BUFFER,
+                                .Alignment = 0,
+                                .Width = primitiveCount * sizeof(unsigned int),
+                                .Height = 1,
+                                .DepthOrArraySize = 1,
+                                .MipLevels = 1,
+                                .Format = DXGI_FORMAT_UNKNOWN,
+                                .SampleDesc = {.Count = 1, .Quality = 0},
+                                .Layout = D3D12_TEXTURE_LAYOUT_ROW_MAJOR,
+                                .Flags = D3D12_RESOURCE_FLAG_NONE,
+                            };
+
+                            const HRESULT hrBufferCreated = device->CreateCommittedResource(
+                                &heap, D3D12_HEAP_FLAG_NONE, &desc, D3D12_RESOURCE_STATE_COMMON,
+                                nullptr, IID_PPV_ARGS(&primitiveIndicesBuffer));
+                            if (FAILED(hrBufferCreated))
+                            {
+                                SA_LOG(L"Create Meshlets Primitive Indices Buffer failed!", Error,
+                                       DX12, (L"Error code: %1", hrBufferCreated));
+                                return EXIT_FAILURE;
+                            }
+                            else
+                            {
+                                const LPCWSTR name = L"primitiveIndicesBuffer";
+                                primitiveIndicesBuffer->SetName(name);
+
+                                SA_LOG(L"Create Meshlets Primitive Indices Buffer success", Info,
+                                       DX12, (L"\"%1\" [%2]", name, primitiveIndicesBuffer.Get()));
+                            }
+
+                            std::vector<unsigned int> primitiveIndices;
+                            primitiveIndices.reserve(primitiveCount);
+                            for (unsigned int i = 0; i < primitiveCount; ++i)
+                            {
+                                primitiveIndices.push_back((inMesh->mFaces[i].mIndices[2] << 16) +
+                                                           (inMesh->mFaces[i].mIndices[1] << 8) +
+                                                           inMesh->mFaces[i].mIndices[0]);
+                            }
+
+                            const bool bSubmitSuccess = SubmitBufferToGPU(
+                                primitiveIndicesBuffer, desc.Width, primitiveIndices.data(),
+                                D3D12_RESOURCE_STATE_VERTEX_AND_CONSTANT_BUFFER);
+                            if (!bSubmitSuccess)
+                            {
+                                SA_LOG(L"Sphere Meshlet submit failed!", Error, DX12);
+                                return EXIT_FAILURE;
+                            }
+
+                            // Create View /* 0011-I-1 */
+                            {
+                                D3D12_SHADER_RESOURCE_VIEW_DESC viewDesc{
+                                    .ViewDimension = D3D12_SRV_DIMENSION_BUFFER,
+                                    .Shader4ComponentMapping =
+                                        D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING,
+                                    .Buffer{
+                                            .FirstElement = 0,
+                                            .NumElements = static_cast<UINT>(primitiveCount),
+                                            .StructureByteStride = sizeof(unsigned int),
+                                            },
+                                };
+                                D3D12_CPU_DESCRIPTOR_HANDLE cpuHandle =
+                                    pbrSphereSRVHeap->GetCPUDescriptorHandleForHeapStart();
+                                const UINT srvOffset = device->GetDescriptorHandleIncrementSize(
+                                    D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
+                                cpuHandle.ptr += 2 * srvOffset;
+                                device->CreateShaderResourceView(primitiveIndicesBuffer.Get(),
+                                                                 &viewDesc, cpuHandle);
+                            }
+                        }
                     }
                 }
 
@@ -2009,8 +2207,8 @@ int main()
                             D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
                         D3D12_CPU_DESCRIPTOR_HANDLE cpuHandle =
                             pbrSphereSRVHeap->GetCPUDescriptorHandleForHeapStart();
-                        cpuHandle.ptr += srvOffset; // Add offset because first slot it for
-                                                    // PointLightsBuffer.
+                        cpuHandle.ptr += 3 * srvOffset; // Add offset because first slot it for
+                                                        // PointLightsBuffer.
 
                         // Albedo
                         {
@@ -2409,11 +2607,11 @@ int main()
                         glfwSetWindowShouldClose(window, true);
                     if (glfwGetKey(window, GLFW_KEY_D) == GLFW_PRESS)
                         cameraTr.position += fixedTime * cameraMoveSpeed * cameraTr.Right();
-                    if (glfwGetKey(window, GLFW_KEY_A) == GLFW_PRESS)
+                    if (glfwGetKey(window, GLFW_KEY_E) == GLFW_PRESS)
                         cameraTr.position -= fixedTime * cameraMoveSpeed * cameraTr.Right();
                     if (glfwGetKey(window, GLFW_KEY_Q) == GLFW_PRESS)
                         cameraTr.position += fixedTime * cameraMoveSpeed * cameraTr.Up();
-                    if (glfwGetKey(window, GLFW_KEY_E) == GLFW_PRESS)
+                    if (glfwGetKey(window, GLFW_KEY_A) == GLFW_PRESS)
                         cameraTr.position -= fixedTime * cameraMoveSpeed * cameraTr.Up();
                     if (glfwGetKey(window, GLFW_KEY_W) == GLFW_PRESS)
                         cameraTr.position += fixedTime * cameraMoveSpeed * cameraTr.Forward();
@@ -2593,17 +2791,26 @@ int main()
                          */
                         // cmd->SetGraphicsRootShaderResourceView(2,
                         // pointLightBuffer->GetGPUVirtualAddress()); // PointLights
-                        cmd->SetGraphicsRootDescriptorTable(2, gpuHandle); // PointLights
-                        gpuHandle.ptr += srvOffset;
+                        cmd->SetGraphicsRootDescriptorTable(6, gpuHandle); // PointLights
 
-                        cmd->SetGraphicsRootDescriptorTable(3, gpuHandle); // PBR textures
+                        // meshlets
                         gpuHandle.ptr += srvOffset;
+                        cmd->SetGraphicsRootDescriptorTable(2, gpuHandle); // Meshlets
+                        cmd->SetGraphicsRootShaderResourceView(
+                            3, sphereVertexBuffers[0]->GetGPUVirtualAddress()); // Vertex Buffer
+                        cmd->SetGraphicsRootShaderResourceView(
+                            4, sphereIndexBuffer->GetGPUVirtualAddress()); // Index Buffer
+                        gpuHandle.ptr += srvOffset;
+                        cmd->SetGraphicsRootDescriptorTable(5, gpuHandle); // Primitive Indices
+
+                        gpuHandle.ptr += srvOffset;
+                        cmd->SetGraphicsRootDescriptorTable(7, gpuHandle); // PBR textures
 
                         /* 0008-U */
                         cmd->SetPipelineState(meshShaderPipelineState.Get());
 
 #ifndef MS_EXECUTE_INDIRECT
-                        cmd->DispatchMesh(12, 1, 1);
+                        cmd->DispatchMesh(128, 1, 1);
 #else
                         // TODO
                         cmd->ExecuteIndirect();

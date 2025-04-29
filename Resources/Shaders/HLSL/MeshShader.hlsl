@@ -50,65 +50,38 @@ cbuffer ObjectBuffer : register(b1)
 	Object object;
 };
 
-// StructuredBuffer<float3> VertexBufferPos: register(t5);
-
-static float4 cubeVertices[] =
+struct Meshlet
 {
-	float4(-0.5f, -0.5f, -0.5f, 1.0f),
-	float4(-0.5f, -0.5f, 0.5f, 1.0f),
-	float4(-0.5f, 0.5f, -0.5f, 1.0f),
-	float4(-0.5f, 0.5f, 0.5f, 1.0f),
-	float4(0.5f, -0.5f, -0.5f, 1.0f),
-	float4(0.5f, -0.5f, 0.5f, 1.0f),
-	float4(0.5f, 0.5f, -0.5f, 1.0f),
-	float4(0.5f, 0.5f, 0.5f, 1.0f),
+	uint32_t vertexCount;
+	uint32_t vertexOffset;
+	uint32_t primitiveCount;
+	uint32_t primitiveOffset;
 };
-
-static float3 cubeColors[] =
-{
-	float3(0.0f, 0.0f, 0.0f),
-	float3(0.0f, 0.0f, 1.0f),
-	float3(0.0f, 1.0f, 0.0f),
-	float3(0.0f, 1.0f, 1.0f),
-	float3(1.0f, 0.0f, 0.0f),
-	float3(1.0f, 0.0f, 1.0f),
-	float3(1.0f, 1.0f, 0.0f),
-	float3(1.0f, 1.0f, 1.0f),
-};
-
-static uint3 cubeIndices[] =
-{
-	uint3(0, 2, 1),
-	uint3(1, 2, 3),
-	uint3(4, 5, 6),
-	uint3(5, 7, 6),
-	uint3(0, 1, 5),
-	uint3(0, 5, 4),
-	uint3(2, 6, 7),
-	uint3(2, 7, 3),
-	uint3(0, 4, 6),
-	uint3(0, 6, 2),
-	uint3(1, 3, 7),
-	uint3(1, 7, 5),
-};
+StructuredBuffer<Meshlet> meshlets: register(t5);
+// vertex buffer
+StructuredBuffer<float3> vertexBufferPositions: register(t6);
+// index buffer
+StructuredBuffer<uint> vertexIndices: register(t7);
+StructuredBuffer<uint> primitiveIndices: register(t8);
 
 [outputtopology("triangle")]
-[numthreads(12, 1, 1)]
-void main(in uint groupThreadId : SV_GroupThreadID,
-	out vertices VertexOutput outVerts[8],
-	out indices uint3 outIndices[12])
+[numthreads(128, 1, 1)]
+void main(
+	in uint groupId : SV_GroupID,
+	in uint groupThreadId : SV_GroupThreadID,
+	out vertices VertexOutput outVerts[128],
+	out indices uint3 outIndices[128])
 {
-	const uint numVertices = 8;
-	const uint numPrimitives = 12;
+	Meshlet meshlet = meshlets[groupId];
 
-	SetMeshOutputCounts(numVertices, numPrimitives);
+	SetMeshOutputCounts(meshlet.vertexCount, meshlet.primitiveCount);
 
-	if (groupThreadId < numVertices)
+	if (groupThreadId < meshlet.vertexCount)
 	{
-		float4 pos = cubeVertices[groupThreadId];
+		uint vertexIndex = vertexIndices[meshlet.vertexOffset + groupThreadId];
+		float4 pos = float4(vertexBufferPositions[vertexIndex], 1.0f);
 		
 		//---------- Position ----------
-		// const float4 worldPosition4 = mul(VertexBufferPos[groupThreadId], object.transform);
 		const float4 worldPosition4 = mul(pos, object.transform);
 		outVerts[groupThreadId].worldPosition = worldPosition4.xyz / worldPosition4.w;
 		outVerts[groupThreadId].svPosition = mul(worldPosition4, camera.invViewProj);
@@ -128,5 +101,12 @@ void main(in uint groupThreadId : SV_GroupThreadID,
 		outVerts[groupThreadId].uv = pos.xy;
 	}
 
-	outIndices[groupThreadId] = cubeIndices[groupThreadId];
+	if (groupThreadId < meshlet.primitiveCount)
+	{
+		uint packedIndices = primitiveIndices[meshlet.primitiveOffset + groupThreadId];
+
+		outIndices[groupThreadId] = uint3(packedIndices & 0xFF,
+			(packedIndices >> 8) & 0xFF,
+			(packedIndices >> 16) & 0xFF);
+	}
 }
