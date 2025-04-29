@@ -10,3 +10,6 @@
 [submodule "ThirdParty/SA/Maths"]
 	path = ThirdParty/SA/Maths
 	url = https://github.com/SapphireSuite/Maths.git
+[submodule "ThirdParty/DirectXMesh"]
+	path = ThirdParty/DirectXMesh
+	url = https://github.com/microsoft/DirectXMesh.git

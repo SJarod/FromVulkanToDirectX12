@@ -64,6 +64,8 @@ extern "C"
 // render mesh shaders enums available
 #include <d3dx12/D3dx12.h>
 
+#include <DirectXMesh.h> // meshlet generation
+
 /**
  * DX12 additionnal Debug tools:
  * Report live objects after uninitialization to track leak and understroyed objects.
@@ -302,13 +304,6 @@ struct ObjectUBO
 constexpr SA::Vec3f spherePosition(0.5f, 0.0f, 2.0f);
 MComPtr<ID3D12Resource> sphereObjectBuffer;
 
-struct Meshlet
-{
-    uint32_t vertexCount;
-    uint32_t vertexOffset;
-    uint32_t primitiveCount;
-    uint32_t primitiveOffset;
-};
 MComPtr<ID3D12Resource> meshletsBuffer;
 MComPtr<ID3D12Resource> primitiveIndicesBuffer;
 
@@ -1439,7 +1434,7 @@ int main()
 
                         const D3D12_RASTERIZER_DESC raster{
                             .FillMode = D3D12_FILL_MODE_SOLID,
-                            .CullMode = D3D12_CULL_MODE_FRONT,
+                            .CullMode = D3D12_CULL_MODE_BACK,
                             .FrontCounterClockwise = FALSE,
                             .DepthBias = D3D12_DEFAULT_DEPTH_BIAS,
                             .DepthBiasClamp = D3D12_DEFAULT_DEPTH_BIAS_CLAMP,
@@ -1731,9 +1726,6 @@ int main()
                         const aiMesh* inMesh = scene->mMeshes[0];
 
                         auto vertexCount = inMesh->mNumVertices;
-                        uint32_t meshletSize = 128;
-                        uint32_t meshletCount = vertexCount / meshletSize;
-                        meshletCount = 1;
                         // Position
                         {
                             /**
@@ -1967,6 +1959,7 @@ int main()
 
                         auto primitiveCount = inMesh->mNumFaces;
                         // Index
+                        std::vector<uint16_t> indices;
                         {
                             const D3D12_HEAP_PROPERTIES heap{
                                 .Type = D3D12_HEAP_TYPE_DEFAULT,
@@ -2011,7 +2004,6 @@ int main()
                             };
 
                             // Pack indices into uint16_t since max index < 65535.
-                            std::vector<uint16_t> indices;
                             indices.resize(inMesh->mNumFaces * 3);
                             sphereIndexCount = inMesh->mNumFaces * 3;
 
@@ -2036,7 +2028,37 @@ int main()
                         }
 
                         // Meshlets Buffer
+                        std::vector<DirectX::MeshletTriangle> primitiveIndices;
                         {
+                            //---- meshlets generation with DirectXMesh
+
+                            size_t nFaces = primitiveCount;
+                            size_t nVerts = vertexCount;
+
+                            auto pos = std::make_unique<DirectX::XMFLOAT3[]>(nVerts);
+                            for (size_t j = 0; j < nVerts; ++j)
+                            {
+                                pos[j].x = inMesh->mVertices[j].x;
+                                pos[j].y = inMesh->mVertices[j].y;
+                                pos[j].z = inMesh->mVertices[j].z;
+                            }
+
+                            std::vector<DirectX::Meshlet> meshlets;
+                            std::vector<uint8_t> uniqueVertexIB;
+                            if (FAILED(ComputeMeshlets(indices.data(), nFaces, pos.get(), nVerts,
+                                                       nullptr, meshlets, uniqueVertexIB,
+                                                       primitiveIndices)))
+                            {
+                                SA_LOG(L"Create Meshlets failed!", Error, DX12);
+                                return EXIT_FAILURE;
+                            }
+
+                            // auto uniqueVertexIndices =
+                            //     reinterpret_cast<const uint16_t*>(uniqueVertexIB.data());
+                            // size_t vertIndices = uniqueVertexIB.size() / sizeof(uint16_t);
+
+                            //-----
+
                             const D3D12_HEAP_PROPERTIES heap{
                                 .Type = D3D12_HEAP_TYPE_DEFAULT,
                             };
@@ -2044,7 +2066,7 @@ int main()
                             const D3D12_RESOURCE_DESC desc{
                                 .Dimension = D3D12_RESOURCE_DIMENSION_BUFFER,
                                 .Alignment = 0,
-                                .Width = meshletCount * sizeof(Meshlet),
+                                .Width = meshlets.size() * sizeof(DirectX::Meshlet),
                                 .Height = 1,
                                 .DepthOrArraySize = 1,
                                 .MipLevels = 1,
@@ -2071,13 +2093,6 @@ int main()
                                 SA_LOG(L"Create Meshlets Buffer success", Info, DX12,
                                        (L"\"%1\" [%2]", name, meshletsBuffer.Get()));
                             }
-
-                            std::vector<Meshlet> meshlets;
-                            meshlets.reserve(meshletCount);
-                            meshlets.push_back(Meshlet{.vertexCount = meshletSize,
-                                                       .vertexOffset = 0,
-                                                       .primitiveCount = primitiveCount,
-                                                       .primitiveOffset = 0});
 
                             const bool bSubmitSuccess =
                                 SubmitBufferToGPU(meshletsBuffer, desc.Width, meshlets.data(),
@@ -2123,15 +2138,6 @@ int main()
 
                                 SA_LOG(L"Create Meshlets Primitive Indices Buffer success", Info,
                                        DX12, (L"\"%1\" [%2]", name, primitiveIndicesBuffer.Get()));
-                            }
-
-                            std::vector<unsigned int> primitiveIndices;
-                            primitiveIndices.reserve(primitiveCount);
-                            for (unsigned int i = 0; i < primitiveCount; ++i)
-                            {
-                                primitiveIndices.push_back((inMesh->mFaces[i].mIndices[2] << 16) +
-                                                           (inMesh->mFaces[i].mIndices[1] << 8) +
-                                                           inMesh->mFaces[i].mIndices[0]);
                             }
 
                             const bool bSubmitSuccess = SubmitBufferToGPU(
@@ -2760,7 +2766,7 @@ int main()
                         cmd->SetPipelineState(meshShaderPipelineState.Get());
 
 #ifndef MS_EXECUTE_INDIRECT
-                        cmd->DispatchMesh(1, 1, 1);
+                        cmd->DispatchMesh(23, 1, 1);
 #else
                         // TODO
                         cmd->ExecuteIndirect();
