@@ -1203,7 +1203,7 @@ int main()
                                         .RegisterSpace = 0,
                                         .Flags =
                                             D3D12_ROOT_DESCRIPTOR_FLAG_DATA_STATIC_WHILE_SET_AT_EXECUTE,
-                                    },                                                       .ShaderVisibility = D3D12_SHADER_VISIBILITY_VERTEX,
+                                    },                                                       .ShaderVisibility = D3D12_SHADER_VISIBILITY_MESH,
                              },
                             // Object Constant buffer
                             {
@@ -1214,7 +1214,7 @@ int main()
                                         .RegisterSpace = 0,
                                         .Flags =
                                             D3D12_ROOT_DESCRIPTOR_FLAG_DATA_STATIC_WHILE_SET_AT_EXECUTE,
-                                    },                                                                                            .ShaderVisibility = D3D12_SHADER_VISIBILITY_VERTEX,
+                                    },                                                                                            .ShaderVisibility = D3D12_SHADER_VISIBILITY_MESH,
                              },
                             // Point Lights Structured buffer
                             {
@@ -1260,7 +1260,8 @@ int main()
                                       .NumStaticSamplers = 1,
                                       .pStaticSamplers = &sampler,
                                       .Flags =
-                                    D3D12_ROOT_SIGNATURE_FLAG_ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT}
+                                    D3D12_ROOT_SIGNATURE_FLAG_DENY_VERTEX_SHADER_ROOT_ACCESS |
+                                    D3D12_ROOT_SIGNATURE_FLAG_DENY_AMPLIFICATION_SHADER_ROOT_ACCESS}
                         };
 
                         MComPtr<ID3DBlob> signature;

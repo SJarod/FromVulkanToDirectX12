@@ -4,6 +4,10 @@ struct VertexOutput
 	/// Vertex world position
 	float3 worldPosition : POSITION;
 
+	float3 normal : NORMAL;
+
+	float3 tangent : TANGENT;
+
 	/// Shader view position
 	float4 svPosition : SV_POSITION;
 
@@ -102,7 +106,24 @@ void main(in uint groupThreadId : SV_GroupThreadID,
 	{
 		float4 pos = cubeVertices[groupThreadId];
 		
-		outVerts[groupThreadId].svPosition = mul(camera.invViewProj, pos);
+		//---------- Position ----------
+		const float4 worldPosition4 = mul(object.transform, pos);
+		outVerts[groupThreadId].worldPosition = worldPosition4.xyz / worldPosition4.w;
+		outVerts[groupThreadId].svPosition = mul(camera.invViewProj, worldPosition4);
+		outVerts[groupThreadId].viewPosition = float3(camera.view._14, camera.view._24, camera.view._34);
+
+
+		//---------- Normal ----------
+		const float3 normal = normalize(mul((float3x3)object.transform, pos.xyz));
+		const float3 tangent = normalize(mul((float3x3)object.transform, pos.xyz));
+		const float3 bitangent = cross(normal, tangent);
+
+		/// HLSL uses row-major constructor: transpose to get TBN matrix.
+		outVerts[groupThreadId].TBN = transpose(float3x3(tangent, bitangent, normal));
+
+
+		//---------- UV ----------
+		outVerts[groupThreadId].uv = pos.xy;
 	}
 
 	outIndices[groupThreadId] = cubeIndices[groupThreadId];
