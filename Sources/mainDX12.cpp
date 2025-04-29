@@ -61,6 +61,9 @@ extern "C"
 #endif
 #include <d3d12.h> // vulkan.h -> d3d12.h
 
+// render mesh shaders enums available
+#include <d3dx12/D3dx12.h>
+
 /**
  * DX12 additionnal Debug tools:
  * Report live objects after uninitialization to track leak and understroyed objects.
@@ -162,7 +165,7 @@ MComPtr<IDXGIFactory6> factory; // VkInstance -> IDXGIFactory
 // === Device === /* 0002 */
 
 // Don't need to keep Adapter (physical Device) reference: only use Logical.
-MComPtr<ID3D12Device> device; // VkDevice -> ID3D12Device
+MComPtr<ID3D12Device2> device; // VkDevice -> ID3D12Device
 
 MComPtr<ID3D12CommandQueue> graphicsQueue; // VkQueue -> ID3D12CommandQueue
 // No PresentQueue needed (already handleled by Swapchain).
@@ -264,11 +267,15 @@ D3D12_RECT scissorRect{};  // VkRect2D -> D3D12_RECT
  */
 #include <d3dcompiler.h>
 
-MComPtr<ID3DBlob> litVertexShader; // VkShaderModule -> ID3DBlob
-MComPtr<ID3DBlob> litPixelShader;
+struct
+{
+    byte* data;
+    uint32_t size;
+} litMeshShader;
+MComPtr<ID3DBlob> litPixelShader; // VkShaderModule -> ID3DBlob
 
 MComPtr<ID3D12RootSignature> litRootSign; // VkPipelineLayout -> ID3D12RootSignature /* 0008-1 */
-MComPtr<ID3D12PipelineState> litPipelineState; // VkPipeline -> ID3D12PipelineState
+MComPtr<ID3D12PipelineState> meshShaderPipelineState; // VkPipeline -> ID3D12PipelineState
 
 // === Scene Objects === /* 0009 */
 
@@ -722,6 +729,24 @@ int main()
 
                     SA_LOG(L"Create Device success.", Info, DX12,
                            (L"\"%1\" [%2]", name, device.Get()));
+                }
+
+                // mesh shader samples
+                // https://learn.microsoft.com/en-us/samples/microsoft/directx-graphics-samples/d3d12-mesh-shader-samples-win32/
+
+                // check if mesh shaders are supported on the device
+                D3D12_FEATURE_DATA_D3D12_OPTIONS7 featureData = {};
+                device->CheckFeatureSupport(D3D12_FEATURE_D3D12_OPTIONS7, &featureData,
+                                            sizeof(featureData));
+                if (FAILED(featureData.MeshShaderTier == D3D12_MESH_SHADER_TIER_NOT_SUPPORTED))
+                {
+                    SA_LOG(L"Mesh shader feature not supported!", Error, DX12,
+                           (L"Error Code: %1", hrDeviceCreated));
+                    return EXIT_FAILURE;
+                }
+                else
+                {
+                    SA_LOG(L"Mesh shader feature supported.", Info, DX12);
                 }
 
 #if SA_DEBUG
@@ -1284,29 +1309,33 @@ int main()
                         }
                     }
 
-                    // Vertex Shader
+                    // Mesh Shader
                     if (true)
                     {
                         MComPtr<ID3DBlob> errors;
 
-                        const HRESULT hrCompileShader = D3DCompileFromFile(
-                            L"Resources/Shaders/HLSL/LitShader.hlsl", nullptr, nullptr, "mainVS",
-                            "vs_5_0", shaderCompileFlags, 0, &litVertexShader, &errors);
-
-                        if (FAILED(hrCompileShader))
+                        CREATEFILE2_EXTENDED_PARAMETERS extendedParams = {};
+                        extendedParams.dwSize = sizeof(CREATEFILE2_EXTENDED_PARAMETERS);
+                        extendedParams.dwFileAttributes = FILE_ATTRIBUTE_NORMAL;
+                        extendedParams.dwFileFlags = FILE_FLAG_SEQUENTIAL_SCAN;
+                        extendedParams.dwSecurityQosFlags = SECURITY_ANONYMOUS;
+                        extendedParams.lpSecurityAttributes = nullptr;
+                        extendedParams.hTemplateFile = nullptr;
+                        Microsoft::WRL::Wrappers::FileHandle file(
+                            CreateFile2(L"Resources/Shaders/HLSL/MeshShader.cso", GENERIC_READ,
+                                        FILE_SHARE_READ, OPEN_EXISTING, &extendedParams));
+                        FILE_STANDARD_INFO fileInfo = {};
+                        if (!GetFileInformationByHandleEx(file.Get(), FileStandardInfo, &fileInfo,
+                                                          sizeof(fileInfo)))
+                            throw std::exception();
+                        litMeshShader.data =
+                            reinterpret_cast<byte*>(malloc(fileInfo.EndOfFile.LowPart));
+                        litMeshShader.size = fileInfo.EndOfFile.LowPart;
+                        if (!ReadFile(file.Get(), litMeshShader.data, fileInfo.EndOfFile.LowPart,
+                                      nullptr, nullptr))
                         {
-                            std::string errorStr(
-                                static_cast<const char*>(errors->GetBufferPointer()),
-                                errors->GetBufferSize());
-                            SA_LOG(L"Shader {LitShader.hlsl, mainVS} compilation failed!", Error,
-                                   DX12, errorStr);
-
+                            SA_LOG(L"Could not load Mesh Shader compiled object!", Error, DX12);
                             return EXIT_FAILURE;
-                        }
-                        else
-                        {
-                            SA_LOG(L"Shader {LitShader.hlsl, mainVS} compilation success.", Info,
-                                   DX12, litVertexShader.Get());
                         }
                     }
 
@@ -1376,74 +1405,19 @@ int main()
                             .ConservativeRaster = D3D12_CONSERVATIVE_RASTERIZATION_MODE_OFF,
                         };
 
-                        const D3D12_DEPTH_STENCIL_DESC depthStencilState{
-                            .DepthEnable = TRUE,
-                            .DepthWriteMask = D3D12_DEPTH_WRITE_MASK_ALL,
-                            .DepthFunc = D3D12_COMPARISON_FUNC_LESS_EQUAL,
-                            .StencilEnable = FALSE,
-                            .StencilReadMask = D3D12_DEFAULT_STENCIL_READ_MASK,
-                            .StencilWriteMask = D3D12_DEFAULT_STENCIL_WRITE_MASK,
-                            .FrontFace{
-                                       .StencilFailOp = D3D12_STENCIL_OP_KEEP,
-                                       .StencilDepthFailOp = D3D12_STENCIL_OP_KEEP,
-                                       .StencilPassOp = D3D12_STENCIL_OP_KEEP,
-                                       .StencilFunc = D3D12_COMPARISON_FUNC_ALWAYS,
-                                       },
-                            .BackFace{
-                                       .StencilFailOp = D3D12_STENCIL_OP_KEEP,
-                                       .StencilDepthFailOp = D3D12_STENCIL_OP_KEEP,
-                                       .StencilPassOp = D3D12_STENCIL_OP_KEEP,
-                                       .StencilFunc = D3D12_COMPARISON_FUNC_ALWAYS,
-                                       }
-                        };
-
-                        D3D12_INPUT_ELEMENT_DESC inputElems[]{
-                            {.SemanticName = "POSITION",
-                             .SemanticIndex = 0,
-                             .Format = DXGI_FORMAT_R32G32B32_FLOAT,
-                             .InputSlot = 0,
-                             .AlignedByteOffset = 0,
-                             .InputSlotClass = D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA,
-                             .InstanceDataStepRate = 0},
-                            {.SemanticName = "NORMAL",
-                             .SemanticIndex = 0,
-                             .Format = DXGI_FORMAT_R32G32B32_FLOAT,
-                             .InputSlot = 1,
-                             .AlignedByteOffset = 0,
-                             .InputSlotClass = D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA,
-                             .InstanceDataStepRate = 0},
-                            {.SemanticName = "TANGENT",
-                             .SemanticIndex = 0,
-                             .Format = DXGI_FORMAT_R32G32B32_FLOAT,
-                             .InputSlot = 2,
-                             .AlignedByteOffset = 0,
-                             .InputSlotClass = D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA,
-                             .InstanceDataStepRate = 0},
-                            {.SemanticName = "TEXCOORD",
-                             .SemanticIndex = 0,
-                             .Format = DXGI_FORMAT_R32G32_FLOAT,
-                             .InputSlot = 3,
-                             .AlignedByteOffset = 0,
-                             .InputSlotClass = D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA,
-                             .InstanceDataStepRate = 0}
-                        };
-                        const D3D12_INPUT_LAYOUT_DESC inputLayout{
-                            .pInputElementDescs = inputElems, .NumElements = _countof(inputElems)};
-
-                        const D3D12_GRAPHICS_PIPELINE_STATE_DESC desc{
+                        const D3DX12_MESH_SHADER_PIPELINE_STATE_DESC psoDesc{
                             .pRootSignature = litRootSign.Get(),
 
-                            .VS{.pShaderBytecode = litVertexShader->GetBufferPointer(),
-                                .BytecodeLength = litVertexShader->GetBufferSize()},
+                            // TODO : .AS
+                            .MS{.pShaderBytecode = litMeshShader.data,
+                                .BytecodeLength = litMeshShader.size},
                             .PS{.pShaderBytecode = litPixelShader->GetBufferPointer(),
                                 .BytecodeLength = litPixelShader->GetBufferSize()},
 
-                            .StreamOutput = {},
                             .BlendState = blendState,
                             .SampleMask = UINT_MAX,
 
                             .RasterizerState = raster,
-                            .InputLayout = inputLayout,
 
                             .PrimitiveTopologyType = D3D12_PRIMITIVE_TOPOLOGY_TYPE_TRIANGLE,
 
@@ -1466,18 +1440,25 @@ int main()
                             .Flags = D3D12_PIPELINE_STATE_FLAG_NONE,
                         };
 
-                        const HRESULT hrCreatePipeline = device->CreateGraphicsPipelineState(
-                            &desc, IID_PPV_ARGS(&litPipelineState));
+                        auto meshStreamDesc = CD3DX12_PIPELINE_MESH_STATE_STREAM(psoDesc);
+
+                        const D3D12_PIPELINE_STATE_STREAM_DESC desc{
+                            .SizeInBytes = sizeof(meshStreamDesc),
+                            .pPipelineStateSubobjectStream = &meshStreamDesc,
+                        };
+
+                        const HRESULT hrCreatePipeline = device->CreatePipelineState(
+                            &desc, IID_PPV_ARGS(&meshShaderPipelineState));
                         if (FAILED(hrCreatePipeline))
                         {
-                            SA_LOG(L"Create Lit PipelineState failed!", Error, DX12,
+                            SA_LOG(L"Create Mesh Shader PipelineState failed!", Error, DX12,
                                    (L"Error Code: %1", hrCreatePipeline));
                             return EXIT_FAILURE;
                         }
                         else
                         {
-                            SA_LOG(L"Create Lit PipelineState success.", Info, DX12,
-                                   litPipelineState.Get());
+                            SA_LOG(L"Create Mesh Shader PipelineState success.", Info, DX12,
+                                   meshShaderPipelineState.Get());
                         }
                     }
                 }
@@ -1520,8 +1501,8 @@ int main()
                 // Camera Buffers
                 {
                     const D3D12_HEAP_PROPERTIES heap{
-                        .Type = D3D12_HEAP_TYPE_UPLOAD, // Keep upload since we will update it each
-                                                        // frame.
+                        .Type = D3D12_HEAP_TYPE_UPLOAD, // Keep upload since we will update it
+                                                        // each frame.
                     };
 
                     const D3D12_RESOURCE_DESC desc{
@@ -1710,9 +1691,9 @@ int main()
                              * Defines if a buffer is GPU only, CPU-GPU, ...
                              * In Vulkan, a buffer can be GPU only or CPU-GPU for data transfer
                              * (read and write). In DirectX12, a buffer is either GPU only
-                             * (default), 'Upload' for data transfer from CPU to GPU, or 'Readback'
-                             * for data transfer from GPU to CPU. 'Upload' and 'Readback' at the
-                             * same time is NOT possible.
+                             * (default), 'Upload' for data transfer from CPU to GPU, or
+                             * 'Readback' for data transfer from GPU to CPU. 'Upload' and
+                             * 'Readback' at the same time is NOT possible.
                              */
                             const D3D12_HEAP_PROPERTIES heap{
                                 .Type = D3D12_HEAP_TYPE_DEFAULT, // Type Default is GPU only.
@@ -1974,8 +1955,8 @@ int main()
                             sphereIndexBufferView = D3D12_INDEX_BUFFER_VIEW{
                                 .BufferLocation = sphereIndexBuffer->GetGPUVirtualAddress(),
                                 .SizeInBytes = static_cast<UINT>(desc.Width),
-                                .Format = DXGI_FORMAT_R16_UINT, // This model's indices are lower
-                                                                // than 65535.
+                                .Format = DXGI_FORMAT_R16_UINT, // This model's indices are
+                                                                // lower than 65535.
                             };
 
                             // Pack indices into uint16_t since max index < 65535.
@@ -2016,8 +1997,8 @@ int main()
                             D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
                         D3D12_CPU_DESCRIPTOR_HANDLE cpuHandle =
                             pbrSphereSRVHeap->GetCPUDescriptorHandleForHeapStart();
-                        cpuHandle.ptr +=
-                            srvOffset; // Add offset because first slot it for PointLightsBuffer.
+                        cpuHandle.ptr += srvOffset; // Add offset because first slot it for
+                                                    // PointLightsBuffer.
 
                         // Albedo
                         {
@@ -2466,7 +2447,8 @@ int main()
 
                     const UINT32 currFenceValue = swapchainFenceValues[swapchainFrameIndex];
 
-                    // If the next frame is not ready to be rendered yet, wait until it is ready.
+                    // If the next frame is not ready to be rendered yet, wait until it is
+                    // ready.
                     if (swapchainFence->GetCompletedValue() < currFenceValue)
                     {
                         const HRESULT hrSetEvent = swapchainFence->SetEventOnCompletion(
@@ -2520,9 +2502,10 @@ int main()
                      * 0006-U0
                      *
                      * Manage Render Targets for render:
-                     * Vulkan uses vkRenderPass and vkFramebuffers to describe in advance how the
-                     * render targets should be managed through passes and subpasses. DirectX12
-                     * doesn't have such system and must manage RenderTargets manually.
+                     * Vulkan uses vkRenderPass and vkFramebuffers to describe in advance how
+                     * the render targets should be managed through passes and subpasses.
+                     * DirectX12 doesn't have such system and must manage RenderTargets
+                     * manually.
                      */
                     {
                         // Color Transition to RenderTarget.
@@ -2592,8 +2575,8 @@ int main()
                             pbrSphereSRVHeap->GetGPUDescriptorHandleForHeapStart();
 
                         /**
-                         * Use DescriptorTable with SRV type instead of direct SRV binding to create
-                         * BufferView in SRV Heap. This allows use to correctly call
+                         * Use DescriptorTable with SRV type instead of direct SRV binding to
+                         * create BufferView in SRV Heap. This allows use to correctly call
                          * pointLights.GetDimensions() in HLSL.
                          */
                         // cmd->SetGraphicsRootShaderResourceView(2,
@@ -2605,7 +2588,7 @@ int main()
                         gpuHandle.ptr += srvOffset;
 
                         /* 0008-U */
-                        cmd->SetPipelineState(litPipelineState.Get());
+                        cmd->SetPipelineState(meshShaderPipelineState.Get());
 
                         // Draw Sphere
                         cmd->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
@@ -2773,8 +2756,8 @@ int main()
                     // PipelineState
                     {
                         SA_LOG(L"Destroying Lit PipelineState...", Info, DX12,
-                               litPipelineState.Get());
-                        litPipelineState = nullptr;
+                               meshShaderPipelineState.Get());
+                        meshShaderPipelineState = nullptr;
                     }
 
                     // Pixel Shader
@@ -2784,11 +2767,10 @@ int main()
                         litPixelShader = nullptr;
                     }
 
-                    // Vertex Shader
+                    // Mesh Shader
                     {
-                        SA_LOG(L"Destroying Lit Vertex Shader...", Info, DX12,
-                               litVertexShader.Get());
-                        litVertexShader = nullptr;
+                        SA_LOG(L"Destroying Lit Mesh Shader...", Info, DX12);
+                        free(litMeshShader.data);
                     }
 
                     // RootSignature
