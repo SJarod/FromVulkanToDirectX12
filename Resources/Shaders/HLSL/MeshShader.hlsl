@@ -61,7 +61,7 @@ StructuredBuffer<Meshlet> meshlets: register(t5);
 // vertex buffer
 StructuredBuffer<float3> vertexBufferPositions: register(t6);
 // index buffer
-StructuredBuffer<uint> vertexIndices: register(t7);
+StructuredBuffer<uint16_t> vertexIndices: register(t7);
 StructuredBuffer<uint> primitiveIndices: register(t8);
 
 [outputtopology("triangle")]

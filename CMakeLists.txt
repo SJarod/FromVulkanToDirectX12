@@ -24,6 +24,7 @@ set(SHADER_SOURCES
 set_source_files_properties("Resources/Shaders/HLSL/MeshShader.hlsl" PROPERTIES
     VS_SHADER_TYPE Mesh
     VS_SHADER_MODEL 6.5
+    VS_SHADER_FLAGS -enable-16bit-types
 )
 set_source_files_properties("Resources/Shaders/HLSL/LitShader.hlsl" PROPERTIES
     VS_SHADER_TYPE Pixel
