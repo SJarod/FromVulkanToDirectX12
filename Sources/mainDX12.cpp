@@ -231,7 +231,7 @@ std::array<MComPtr<ID3D12CommandAllocator>, bufferingCount> cmdAllocs;
  * /!\ with DirectX12, for graphics operations, the 'CommandList' type is not enough.
  * ID3D12GraphicsCommandList must be used. Like for Vulkan, we allocate 1 command buffer per frame.
  */
-MComPtr<ID3D12GraphicsCommandList1> cmdList;
+MComPtr<ID3D12GraphicsCommandList6> cmdList;
 
 // === Scene Textures === /* 0005 */
 
@@ -2585,13 +2585,11 @@ int main()
                         /* 0008-U */
                         cmd->SetPipelineState(meshShaderPipelineState.Get());
 
-                        // Draw Sphere
-                        cmd->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
-                        cmd->IASetVertexBuffers(0,
-                                                static_cast<UINT>(sphereVertexBufferViews.size()),
-                                                sphereVertexBufferViews.data());
-                        cmd->IASetIndexBuffer(&sphereIndexBufferView);
-                        cmd->DrawIndexedInstanced(sphereIndexCount, 1, 0, 0, 0);
+#ifndef MS_EXECUTE_INDIRECT
+                        cmd->DispatchMesh(12, 1, 1);
+#else
+                        cmd->ExecuteIndirect();
+#endif
                     }
 
                     // Manage RenderTargets for present. 0006-U2
