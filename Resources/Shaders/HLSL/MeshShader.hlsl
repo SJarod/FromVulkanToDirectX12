@@ -50,20 +50,7 @@ cbuffer ObjectBuffer : register(b1)
 	Object object;
 };
 
-struct VertexFactory
-{
-	float3 position;
-
-	float3 normal;
-
-	float3 tangent;
-
-	float2 uv;
-};
-cbuffer VertexBuffer : register(b2)
-{
-	VertexFactory vertices;
-}
+// StructuredBuffer<float3> VertexBufferPos: register(t5);
 
 static float4 cubeVertices[] =
 {
@@ -121,6 +108,7 @@ void main(in uint groupThreadId : SV_GroupThreadID,
 		float4 pos = cubeVertices[groupThreadId];
 		
 		//---------- Position ----------
+		// const float4 worldPosition4 = mul(VertexBufferPos[groupThreadId], object.transform);
 		const float4 worldPosition4 = mul(pos, object.transform);
 		outVerts[groupThreadId].worldPosition = worldPosition4.xyz / worldPosition4.w;
 		outVerts[groupThreadId].svPosition = mul(worldPosition4, camera.invViewProj);
