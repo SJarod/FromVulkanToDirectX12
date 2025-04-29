@@ -1,16 +1,3 @@
-//-------------------- Vertex Shader --------------------
-
-struct VertexFactory
-{
-	float3 position : POSITION;
-
-	float3 normal : NORMAL;
-
-	float3 tangent : TANGENT;
-
-	float2 uv : TEXCOORD;
-};
-
 
 struct VertexOutput
 {
@@ -60,28 +47,63 @@ cbuffer ObjectBuffer : register(b1)
 };
 
 
-VertexOutput main(VertexFactory _input)
+static float4 cubeVertices[] =
 {
-	VertexOutput output;
+	float4(-0.5f, -0.5f, -0.5f, 1.0f),
+	float4(-0.5f, -0.5f, 0.5f, 1.0f),
+	float4(-0.5f, 0.5f, -0.5f, 1.0f),
+	float4(-0.5f, 0.5f, 0.5f, 1.0f),
+	float4(0.5f, -0.5f, -0.5f, 1.0f),
+	float4(0.5f, -0.5f, 0.5f, 1.0f),
+	float4(0.5f, 0.5f, -0.5f, 1.0f),
+	float4(0.5f, 0.5f, 0.5f, 1.0f),
+};
 
-	//---------- Position ----------
-	const float4 worldPosition4 = mul(object.transform, float4(_input.position, 1.0));
-	output.worldPosition = worldPosition4.xyz / worldPosition4.w;
-	output.svPosition = mul(camera.invViewProj, worldPosition4);
-	output.viewPosition = float3(camera.view._14, camera.view._24, camera.view._34);
+static float3 cubeColors[] =
+{
+	float3(0.0f, 0.0f, 0.0f),
+	float3(0.0f, 0.0f, 1.0f),
+	float3(0.0f, 1.0f, 0.0f),
+	float3(0.0f, 1.0f, 1.0f),
+	float3(1.0f, 0.0f, 0.0f),
+	float3(1.0f, 0.0f, 1.0f),
+	float3(1.0f, 1.0f, 0.0f),
+	float3(1.0f, 1.0f, 1.0f),
+};
 
+static uint3 cubeIndices[] =
+{
+	uint3(0, 2, 1),
+	uint3(1, 2, 3),
+	uint3(4, 5, 6),
+	uint3(5, 7, 6),
+	uint3(0, 1, 5),
+	uint3(0, 5, 4),
+	uint3(2, 6, 7),
+	uint3(2, 7, 3),
+	uint3(0, 4, 6),
+	uint3(0, 6, 2),
+	uint3(1, 3, 7),
+	uint3(1, 7, 5),
+};
 
-	//---------- Normal ----------
-	const float3 normal = normalize(mul((float3x3)object.transform, _input.normal));
-	const float3 tangent = normalize(mul((float3x3)object.transform, _input.tangent));
-	const float3 bitangent = cross(normal, tangent);
+[outputtopology("triangle")]
+[numthreads(12, 1, 1)]
+void main(in uint groupThreadId : SV_GroupThreadID,
+	out vertices VertexOutput outVerts[8],
+	out indices uint3 outIndices[12])
+{
+	const uint numVertices = 8;
+	const uint numPrimitives = 12;
 
-	/// HLSL uses row-major constructor: transpose to get TBN matrix.
-	output.TBN = transpose(float3x3(tangent, bitangent, normal));
+	SetMeshOutputCounts(numVertices, numPrimitives);
 
+	if (groupThreadId < numVertices)
+	{
+		float4 pos = cubeVertices[groupThreadId];
+		
+		outVerts[groupThreadId].svPosition = mul(camera.invViewProj, pos);
+	}
 
-	//---------- UV ----------
-	output.uv = _input.uv;
-
-	return output;
+	outIndices[groupThreadId] = cubeIndices[groupThreadId];
 }

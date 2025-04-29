@@ -17,10 +17,21 @@ set(MY_PACKAGE_OUTPUT_DIR "${CMAKE_SOURCE_DIR}/ThirdParty/packages")
 
 
 # ===== Target mainDX12 =====
-set(MESH_SHADER_PATH "Resources/Shaders/HLSL/MeshShader.hlsl")
-set_property(SOURCE ${MESH_SHADER_PATH} PROPERTY VS_SHADER_TYPE Mesh)
-set_property(SOURCE ${MESH_SHADER_PATH} PROPERTY VS_SHADER_MODEL 6.5)
-add_executable(FVTDX12_mainDX12 "Sources/mainDX12.cpp" ${MESH_SHADER_PATH})
+set(SHADER_SOURCES
+    "Resources/Shaders/HLSL/MeshShader.hlsl"
+    "Resources/Shaders/HLSL/LitShader.hlsl"
+)
+set_source_files_properties("Resources/Shaders/HLSL/MeshShader.hlsl" PROPERTIES
+    VS_SHADER_TYPE Mesh
+    VS_SHADER_MODEL 6.5
+)
+set_source_files_properties("Resources/Shaders/HLSL/LitShader.hlsl" PROPERTIES
+    VS_SHADER_TYPE Pixel
+    VS_SHADER_MODEL 6.5
+    VS_SHADER_ENTRYPOINT mainPS
+    #VS_SHADER_OBJECT_FILE_NAME LitPixelShader.cso
+)
+add_executable(FVTDX12_mainDX12 "Sources/mainDX12.cpp" ${SHADER_SOURCES})
 
 # Install Agility SDK 1.615.1 to nake sure everyone has Mesh-shader ready D3D12 dll
 # See Agility SDK documentation: https://devblogs.microsoft.com/directx/gettingstarted-dx12agility/

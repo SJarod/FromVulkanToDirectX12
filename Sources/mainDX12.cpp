@@ -165,7 +165,7 @@ MComPtr<IDXGIFactory6> factory; // VkInstance -> IDXGIFactory
 // === Device === /* 0002 */
 
 // Don't need to keep Adapter (physical Device) reference: only use Logical.
-MComPtr<ID3D12Device2> device; // VkDevice -> ID3D12Device
+MComPtr<ID3D12Device2> device; // VkDevice -> ID3D12Device2
 
 MComPtr<ID3D12CommandQueue> graphicsQueue; // VkQueue -> ID3D12CommandQueue
 // No PresentQueue needed (already handleled by Swapchain).
@@ -271,8 +271,7 @@ struct
 {
     byte* data;
     uint32_t size;
-} litMeshShader;
-MComPtr<ID3DBlob> litPixelShader; // VkShaderModule -> ID3DBlob
+} litMeshShader, litPixelShader; // VkShaderModule -> plain old data
 
 MComPtr<ID3D12RootSignature> litRootSign; // VkPipelineLayout -> ID3D12RootSignature /* 0008-1 */
 MComPtr<ID3D12PipelineState> meshShaderPipelineState; // VkPipeline -> ID3D12PipelineState
@@ -1139,15 +1138,6 @@ int main()
                     };
                 }
 
-#if SA_DEBUG
-                // Enable better shader debugging with the graphics debugging tools.
-                const UINT shaderCompileFlags = D3DCOMPILE_PACK_MATRIX_ROW_MAJOR |
-                                                D3DCOMPILE_DEBUG | D3DCOMPILE_SKIP_OPTIMIZATION;
-#else
-                const UINT shaderCompileFlags =
-                    D3DCOMPILE_PACK_MATRIX_ROW_MAJOR | D3DCOMPILE_OPTIMIZATION_LEVEL3;
-#endif
-
                 // Lit
                 {
                     // RootSignature /* 0008-1-I */
@@ -1322,8 +1312,8 @@ int main()
                         extendedParams.lpSecurityAttributes = nullptr;
                         extendedParams.hTemplateFile = nullptr;
                         Microsoft::WRL::Wrappers::FileHandle file(
-                            CreateFile2(L"Resources/Shaders/HLSL/MeshShader.cso", GENERIC_READ,
-                                        FILE_SHARE_READ, OPEN_EXISTING, &extendedParams));
+                            CreateFile2(L"MeshShader.cso", GENERIC_READ, FILE_SHARE_READ,
+                                        OPEN_EXISTING, &extendedParams));
                         FILE_STANDARD_INFO fileInfo = {};
                         if (!GetFileInformationByHandleEx(file.Get(), FileStandardInfo, &fileInfo,
                                                           sizeof(fileInfo)))
@@ -1343,24 +1333,28 @@ int main()
                     {
                         MComPtr<ID3DBlob> errors;
 
-                        const HRESULT hrCompileShader = D3DCompileFromFile(
-                            L"Resources/Shaders/HLSL/LitShader.hlsl", nullptr, nullptr, "mainPS",
-                            "ps_5_0", shaderCompileFlags, 0, &litPixelShader, &errors);
-
-                        if (FAILED(hrCompileShader))
+                        CREATEFILE2_EXTENDED_PARAMETERS extendedParams = {};
+                        extendedParams.dwSize = sizeof(CREATEFILE2_EXTENDED_PARAMETERS);
+                        extendedParams.dwFileAttributes = FILE_ATTRIBUTE_NORMAL;
+                        extendedParams.dwFileFlags = FILE_FLAG_SEQUENTIAL_SCAN;
+                        extendedParams.dwSecurityQosFlags = SECURITY_ANONYMOUS;
+                        extendedParams.lpSecurityAttributes = nullptr;
+                        extendedParams.hTemplateFile = nullptr;
+                        Microsoft::WRL::Wrappers::FileHandle file(
+                            CreateFile2(L"LitShader.cso", GENERIC_READ, FILE_SHARE_READ,
+                                        OPEN_EXISTING, &extendedParams));
+                        FILE_STANDARD_INFO fileInfo = {};
+                        if (!GetFileInformationByHandleEx(file.Get(), FileStandardInfo, &fileInfo,
+                                                          sizeof(fileInfo)))
+                            throw std::exception();
+                        litPixelShader.data =
+                            reinterpret_cast<byte*>(malloc(fileInfo.EndOfFile.LowPart));
+                        litPixelShader.size = fileInfo.EndOfFile.LowPart;
+                        if (!ReadFile(file.Get(), litPixelShader.data, fileInfo.EndOfFile.LowPart,
+                                      nullptr, nullptr))
                         {
-                            std::string errorStr(
-                                static_cast<const char*>(errors->GetBufferPointer()),
-                                errors->GetBufferSize());
-                            SA_LOG(L"Shader {LitShader.hlsl, mainPS} compilation failed.", Error,
-                                   DX12, errorStr);
-
+                            SA_LOG(L"Could not load Pixel Shader compiled object!", Error, DX12);
                             return EXIT_FAILURE;
-                        }
-                        else
-                        {
-                            SA_LOG(L"Shader {LitShader.hlsl, mainPS} compilation success.", Info,
-                                   DX12, litPixelShader.Get());
                         }
                     }
 
@@ -1411,8 +1405,8 @@ int main()
                             // TODO : .AS
                             .MS{.pShaderBytecode = litMeshShader.data,
                                 .BytecodeLength = litMeshShader.size},
-                            .PS{.pShaderBytecode = litPixelShader->GetBufferPointer(),
-                                .BytecodeLength = litPixelShader->GetBufferSize()},
+                            .PS{.pShaderBytecode = litPixelShader.data,
+                                .BytecodeLength = litPixelShader.size},
 
                             .BlendState = blendState,
                             .SampleMask = UINT_MAX,
@@ -2762,9 +2756,8 @@ int main()
 
                     // Pixel Shader
                     {
-                        SA_LOG(L"Destroying Lit Vertex Shader...", Info, DX12,
-                               litPixelShader.Get());
-                        litPixelShader = nullptr;
+                        SA_LOG(L"Destroying Lit Vertex Shader...", Info, DX12);
+                        free(litPixelShader.data);
                     }
 
                     // Mesh Shader
