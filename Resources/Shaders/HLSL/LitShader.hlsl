@@ -115,7 +115,7 @@ struct PointLight
 
 	float radius;
 };
-
+ 
 StructuredBuffer<PointLight> pointLights : register(t0);
 
 

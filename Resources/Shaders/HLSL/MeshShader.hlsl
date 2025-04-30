@@ -105,9 +105,6 @@ void main(
 	{
 		uint packedIndices = primitiveIndices[meshlet.primitiveOffset + groupThreadId];
 
-		// outIndices[groupThreadId] = uint3(packedIndices & 0xFF,
-		// 	(packedIndices >> 8) & 0xFF,
-		// 	(packedIndices >> 16) & 0xFF);
 		outIndices[groupThreadId] = uint3(packedIndices & 0x3FF,
 			(packedIndices >> 10) & 0x3FF,
 			(packedIndices >> 20) & 0x3FF);

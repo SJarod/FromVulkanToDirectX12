@@ -304,6 +304,7 @@ struct ObjectUBO
 constexpr SA::Vec3f spherePosition(0.5f, 0.0f, 2.0f);
 MComPtr<ID3D12Resource> sphereObjectBuffer;
 
+int meshletCount = 0;
 MComPtr<ID3D12Resource> meshletsBuffer;
 MComPtr<ID3D12Resource> primitiveIndicesBuffer;
 
@@ -2052,6 +2053,7 @@ int main()
                                 SA_LOG(L"Create Meshlets failed!", Error, DX12);
                                 return EXIT_FAILURE;
                             }
+                            meshletCount = static_cast<int>(meshlets.size());
 
                             // auto uniqueVertexIndices =
                             //     reinterpret_cast<const uint16_t*>(uniqueVertexIB.data());
@@ -2766,7 +2768,7 @@ int main()
                         cmd->SetPipelineState(meshShaderPipelineState.Get());
 
 #ifndef MS_EXECUTE_INDIRECT
-                        cmd->DispatchMesh(23, 1, 1);
+                        cmd->DispatchMesh(meshletCount, 1, 1);
 #else
                         // TODO
                         cmd->ExecuteIndirect();
@@ -2909,6 +2911,18 @@ int main()
                     sphereObjectBuffer = nullptr;
                 }
 
+                // Meshlet Buffer
+                {
+                    SA_LOG(L"Destroying Meshlet Buffer...", Info, DX12, meshletsBuffer.Get());
+                    meshletsBuffer = nullptr;
+                }
+                // Meshlet primitive indices Buffer
+                {
+                    SA_LOG(L"Destroying Meshlet primitive indices Buffer...", Info, DX12,
+                           primitiveIndicesBuffer.Get());
+                    primitiveIndicesBuffer = nullptr;
+                }
+
                 // PointLights Buffer
                 {
                     SA_LOG(L"Destroying PointLights Buffer...", Info, DX12, pointLightBuffer.Get());
@@ -2936,7 +2950,7 @@ int main()
 
                     // Pixel Shader
                     {
-                        SA_LOG(L"Destroying Lit Vertex Shader...", Info, DX12);
+                        SA_LOG(L"Destroying Lit Fragment Shader...", Info, DX12);
                         free(litPixelShader.data);
                     }
 
