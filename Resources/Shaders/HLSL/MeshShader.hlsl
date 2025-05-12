@@ -60,6 +60,9 @@ struct Meshlet
 StructuredBuffer<Meshlet> meshlets: register(t5);
 // vertex buffer
 StructuredBuffer<float3> vertexBufferPositions: register(t6);
+StructuredBuffer<float3> vertexBufferNormals: register(t9);
+StructuredBuffer<float3> vertexBufferTangents: register(t10);
+StructuredBuffer<float2> vertexBufferTexCoords: register(t11);
 // index buffer
 StructuredBuffer<uint16_t> vertexIndices: register(t7);
 StructuredBuffer<uint> primitiveIndices: register(t8);
@@ -89,16 +92,18 @@ void main(
 
 
 		//---------- Normal ----------
-		const float3 normal = normalize(mul((float3x3)object.transform, pos.xyz));
-		const float3 tangent = normalize(mul((float3x3)object.transform, pos.xyz));
+		const float3 normal = normalize(mul((float3x3)object.transform, vertexBufferNormals[vertexIndex]));
+		const float3 tangent = normalize(mul((float3x3)object.transform, vertexBufferTangents[vertexIndex]));
 		const float3 bitangent = cross(normal, tangent);
+		outVerts[groupThreadId].normal = vertexBufferNormals[vertexIndex];
+		outVerts[groupThreadId].tangent = tangent;
 
 		// HLSL uses row-major constructor: transpose to get TBN matrix.
 		outVerts[groupThreadId].TBN = transpose(float3x3(tangent, bitangent, normal));
 
 
 		//---------- UV ----------
-		outVerts[groupThreadId].uv = pos.xy;
+		outVerts[groupThreadId].uv = vertexBufferTexCoords[vertexIndex];
 	}
 
 	if (groupThreadId < meshlet.primitiveCount)

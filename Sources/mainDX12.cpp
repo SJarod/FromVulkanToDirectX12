@@ -1263,6 +1263,36 @@ int main()
                                             D3D12_ROOT_DESCRIPTOR_FLAG_DATA_STATIC_WHILE_SET_AT_EXECUTE,
                                     },                                                    .ShaderVisibility = D3D12_SHADER_VISIBILITY_MESH,
                              },
+                            {
+                             .ParameterType = D3D12_ROOT_PARAMETER_TYPE_SRV,
+                             .Descriptor =
+                                    {
+                                        .ShaderRegister = 9,
+                                        .RegisterSpace = 0,
+                                        .Flags =
+                                            D3D12_ROOT_DESCRIPTOR_FLAG_DATA_STATIC_WHILE_SET_AT_EXECUTE,
+                                    },                                                                                         .ShaderVisibility = D3D12_SHADER_VISIBILITY_MESH,
+                             },
+                            {
+                             .ParameterType = D3D12_ROOT_PARAMETER_TYPE_SRV,
+                             .Descriptor =
+                                    {
+                                        .ShaderRegister = 10,
+                                        .RegisterSpace = 0,
+                                        .Flags =
+                                            D3D12_ROOT_DESCRIPTOR_FLAG_DATA_STATIC_WHILE_SET_AT_EXECUTE,
+                                    },.ShaderVisibility = D3D12_SHADER_VISIBILITY_MESH,
+                             },
+                            {
+                             .ParameterType = D3D12_ROOT_PARAMETER_TYPE_SRV,
+                             .Descriptor =
+                                    {
+                                        .ShaderRegister = 11,
+                                        .RegisterSpace = 0,
+                                        .Flags =
+                                            D3D12_ROOT_DESCRIPTOR_FLAG_DATA_STATIC_WHILE_SET_AT_EXECUTE,
+                                    },              .ShaderVisibility = D3D12_SHADER_VISIBILITY_MESH,
+                             },
                             // Point Lights Structured buffer
                             {
                              /**
@@ -2749,20 +2779,30 @@ int main()
                          */
                         // cmd->SetGraphicsRootShaderResourceView(2,
                         // pointLightBuffer->GetGPUVirtualAddress()); // PointLights
-                        cmd->SetGraphicsRootDescriptorTable(6, gpuHandle); // PointLights
+                        cmd->SetGraphicsRootDescriptorTable(9, gpuHandle); // PointLights
 
                         // meshlets
                         cmd->SetGraphicsRootShaderResourceView(
                             2, meshletsBuffer->GetGPUVirtualAddress()); // Meshlets
                         cmd->SetGraphicsRootShaderResourceView(
-                            3, sphereVertexBuffers[0]->GetGPUVirtualAddress()); // Vertex Buffer
+                            3, sphereVertexBuffers[0]
+                                   ->GetGPUVirtualAddress()); // Vertex Buffer positions
+                        cmd->SetGraphicsRootShaderResourceView(
+                            6, sphereVertexBuffers[1]
+                                   ->GetGPUVirtualAddress()); // Vertex Buffer normals
+                        cmd->SetGraphicsRootShaderResourceView(
+                            7, sphereVertexBuffers[2]
+                                   ->GetGPUVirtualAddress()); // Vertex Buffer tangents
+                        cmd->SetGraphicsRootShaderResourceView(
+                            8, sphereVertexBuffers[3]
+                                   ->GetGPUVirtualAddress()); // Vertex Buffer tex coords
                         cmd->SetGraphicsRootShaderResourceView(
                             4, sphereIndexBuffer->GetGPUVirtualAddress()); // Index Buffer
                         cmd->SetGraphicsRootShaderResourceView(
                             5, primitiveIndicesBuffer->GetGPUVirtualAddress()); // Primitive Indices
 
                         gpuHandle.ptr += srvOffset;
-                        cmd->SetGraphicsRootDescriptorTable(7, gpuHandle); // PBR textures
+                        cmd->SetGraphicsRootDescriptorTable(10, gpuHandle); // PBR textures
 
                         /* 0008-U */
                         cmd->SetPipelineState(meshShaderPipelineState.Get());
