@@ -88,7 +88,7 @@ void main(
 		const float4 worldPosition4 = mul(pos, object.transform);
 		outVerts[groupThreadId].worldPosition = worldPosition4.xyz / worldPosition4.w;
 		outVerts[groupThreadId].svPosition = mul(worldPosition4, camera.invViewProj);
-		outVerts[groupThreadId].viewPosition = float3(camera.view._14, camera.view._24, camera.view._34);
+		outVerts[groupThreadId].viewPosition = float3(camera.view._41, camera.view._42, camera.view._43);
 
 
 		//---------- Normal ----------
